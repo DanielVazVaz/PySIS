@@ -121,6 +121,19 @@ class MaterialStream:
             values_to_set[self.comp_list.index(component)] = values[component]
         values_to_set = tuple(values_to_set)
         self.COMObject.ComponentMassFlow.SetValues(values_to_set, units)
+        
+    def get_compmolarflow(self, units = "kgmole/h"):
+        return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMolarFlow.GetValues(units))}
+    
+    def set_compmolarflow(self, values: dict, units = "kgmole/h"):
+        values_to_set = [0]*len(self.comp_list)
+        for component in values:
+            values_to_set[self.comp_list.index(component)] = values[component]
+        values_to_set = tuple(values_to_set)
+        self.COMObject.ComponentMolarFlow.SetValues(values_to_set, units)
+        
+    def get_compmassfraction(self):
+        return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMassFraction.GetValues(""))}
     
     def set_compmassfraction(self, values: dict):
         values_to_set = [0]*len(self.comp_list)
@@ -129,14 +142,16 @@ class MaterialStream:
         values_to_set = tuple(values_to_set)
         self.COMObject.ComponentMassFraction.SetValues(values_to_set, "")
         
+    def get_compmolarfraction(self):
+        return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMolarFraction.GetValues(""))}
+
     def set_compmolarfraction(self, values: dict):
         values_to_set = [0]*len(self.comp_list)
         for component in values:
             values_to_set[self.comp_list.index(component)] = values[component]
         values_to_set = tuple(values_to_set)
-        self.COMObject.ComponentMassFlow.SetValues(values_to_set, "")
-        
-        
+        self.COMObject.ComponentMolarFraction.SetValues(values_to_set, "")
+
 class EnergyStream:
     def __init__(self, COMObject):
         """"
