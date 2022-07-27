@@ -12,6 +12,7 @@ class Simulation:
         Inputs:
             - path: String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
         """
+        dictionary_units = {"Heat Transfer Equipment": HeatExchanger}
         self.app = win32.Dispatch("HYSYS.Application")
         if path == "Active":
             self.case = self.app.ActiveDocument
@@ -22,7 +23,8 @@ class Simulation:
         self.thermo_package = self.case.Flowsheet.FluidPackage.PropertyPackageName
         self.comp_list      = [i.name for i in self.case.Flowsheet.FluidPackage.Components]
         self.Solver         = self.case.Solver
-        self.Operations     = {str(i):i for i in self.case.Flowsheet.Operations}
+        self.Operations     = {str(i):dictionary_units[i.ClassificationName](i) if i.ClassificationName 
+                               in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
         self.MatStreams     = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
         self.EnerStreams    = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
         
@@ -54,7 +56,7 @@ class Simulation:
         
     def close(self) -> None:
         """
-        Closes the instance and the HYSYS connection. If you do not close it before working in the flowsheet,
+        Closes the instance and the HYSYS connection. If you do not close it,
         the task will remain and you will have to stop it from the task manage. 
         """
         self.case.Close()
@@ -72,14 +74,25 @@ class Simulation:
         Prints the basic information of the flowsheet.
         """
         return f"File: {self.file_name}\nThermodynamical package: {self.thermo_package}\nComponent list: {self.comp_list}"
+
+class ProcessStream:
+    def __init__(self, COMObject):
+        self.COMObject   = COMObject 
+        self.connections = self.get_connections()
+        self.name        = self.COMObject.name
+        
+    def get_connections(self) -> dict:
+        upstream   = [i.name for i in self.COMObject.UpstreamOpers]
+        downstream = [i.name for i in self.COMObject.DownstreamOpers]
+        return {"Upstream": upstream, "Downstream": downstream}
     
-class MaterialStream:
+class MaterialStream(ProcessStream):
     def __init__(self, COMObject, comp_list):
         """"
         Reads the COMObjectfrom the simulation. This class designs a material stream, which has a series
         of properties.
         """
-        self.COMObject = COMObject
+        super().__init__(COMObject)
         self.comp_list = comp_list
         
     def get_property(self, property_dict: dict) -> dict:
@@ -114,8 +127,51 @@ class MaterialStream:
         if properties_not_found:
             print(f"WARNING. The following properties were not found: {properties_not_found}")
         return result_dict
+    
+    def set_property(self, property_dict: dict) -> None:
+        """
+        Specify a dictionary with different properties and the units you desire for them.
+        Set the properties returned in another dict. 
+        
+        Each element of the dict must be a tuple with (value:float, units:string). For the
+        case of component properties, such as compmassflow, the structure is: (value:dict, unit:string)
+        where the value dictionary has the form {"ComponentName": value}.
+        
+        If some of the properties fail to be set (Normally because the property is not free),
+        then it will stop and return an AssertionError. Any property after hte one that fails
+        is not set.
+        """
+        properties_not_found = []
+        for property in property_dict:
+            if len(property_dict[property]) < 2:
+                units = "Adimensional"
+            else:
+                units = property_dict[property][1]
+            value = property_dict[property][0]
+            og_property = property
+            property = property.upper()
+            if property == "PRESSURE":
+                self.set_pressure(value, units)
+            elif property == "TEMPERATURE":
+                self.set_temperature(value, units)
+            elif property == "MASSFLOW" or property == "MASS_FLOW":
+                self.set_massflow(value, units)
+            elif property == "MOLARFLOW" or property == "MOLAR_FLOW":
+                self.set_molarflow(value, units)
+            elif property == "COMPMASSFLOW" or property == "COMPONENT_MASS_FLOW":
+                self.set_compmassflow(value, units)
+            elif property == "COMPMOLARFLOW" or property == "COMPONENT_MOLAR_FLOW":
+                self.set_compmolarflow(value, units)
+            elif property == "COMPMASSFRACTION" or property == "COMPONENT_MASS_FRACTION":
+                self.set_compmassfraction(value)
+            elif property == "COMPMOLARFRACTION" or property == "COMPONENT_MOLAR_FRACTION":
+                self.set_compmolarfraction(value)
+            else:
+                properties_not_found.append(og_property)
+        if properties_not_found:
+            print(f"WARNING. The following properties were not found: {properties_not_found}")
             
-    def get_pressure(self, units = "bar"):
+    def get_pressure(self, units = "bar") -> float:
         return self.COMObject.Pressure.GetValue(units)
     
     def set_pressure(self, value, units = "bar"):
@@ -125,10 +181,10 @@ class MaterialStream:
         else:
             self.COMObject.Pressure.SetValue(value, units)
     
-    def get_temperature(self, units = "K"):
+    def get_temperature(self, units = "K") -> float:
         return self.COMObject.Temperature.GetValue(units)
     
-    def set_temperature(self, value, units = "K"):
+    def set_temperature(self, value, units = "K") -> None:
         assert self.COMObject.Temperature.State == 1, "The variable is calculated. Cannot modify it."
         if value == "empty":
             self.COMObject.Temperature.SetValue(-32767.0, "K")
@@ -155,59 +211,107 @@ class MaterialStream:
         else:
             self.COMObject.MolarFlow.SetValue(value, units)
     
-    def get_compmassflow(self, units = "kg/h"):
+    def get_compmassflow(self, units = "kg/h") -> dict:
         return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMassFlow.GetValues(units))}
     
-    def set_compmassflow(self, values: dict, units = "kg/h"):
-        assert self.COMObject.ComponentMassFlow.State == 1, "The variable is calculated. Cannot modify it."
+    def set_compmassflow(self, values: dict, units = "kg/h") -> None:
+        assert self.COMObject.ComponentMassFlow.State == (1,)*len(self.comp_list), "The variable is calculated. Cannot modify it."
         values_to_set = [0]*len(self.comp_list)
         for component in values:
             values_to_set[self.comp_list.index(component)] = values[component]
         values_to_set = tuple(values_to_set)
         self.COMObject.ComponentMassFlow.SetValues(values_to_set, units)
         
-    def get_compmolarflow(self, units = "kgmole/h"):
+    def get_compmolarflow(self, units = "kgmole/h") -> dict:
         return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMolarFlow.GetValues(units))}
     
-    def set_compmolarflow(self, values: dict, units = "kgmole/h"):
-        assert self.COMObject.ComponentMolarFlow.State == 1, "The variable is calculated. Cannot modify it."
+    def set_compmolarflow(self, values: dict, units = "kgmole/h") -> None:
+        assert self.COMObject.ComponentMolarFlow.State == (1,)*len(self.comp_list), "The variable is calculated. Cannot modify it."
         values_to_set = [0]*len(self.comp_list)
         for component in values:
             values_to_set[self.comp_list.index(component)] = values[component]
         values_to_set = tuple(values_to_set)
         self.COMObject.ComponentMolarFlow.SetValues(values_to_set, units)
         
-    def get_compmassfraction(self):
+    def get_compmassfraction(self) -> dict:
         return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMassFraction.GetValues(""))}
     
-    def set_compmassfraction(self, values: dict):
-        assert self.COMObject.ComponentMassFraction.State == 1, "The variable is calculated. Cannot modify it."
+    def set_compmassfraction(self, values: dict) -> None:
+        assert self.COMObject.ComponentMassFraction.State == (1,)*len(self.comp_list), "The variable is calculated. Cannot modify it."
         values_to_set = [0]*len(self.comp_list)
         for component in values:
             values_to_set[self.comp_list.index(component)] = values[component]
         values_to_set = tuple(values_to_set)
         self.COMObject.ComponentMassFraction.SetValues(values_to_set, "")
         
-    def get_compmolarfraction(self):
+    def get_compmolarfraction(self) -> dict:
         return {i:j for (i,j) in zip(self.comp_list, self.COMObject.ComponentMolarFraction.GetValues(""))}
 
-    def set_compmolarfraction(self, values: dict):
+    def set_compmolarfraction(self, values: dict) -> None:
+        assert self.COMObject.ComponentMolarFraction.State == (1,)*len(self.comp_list), "The variable is calculated. Cannot modify it."
         values_to_set = [0]*len(self.comp_list)
         for component in values:
             values_to_set[self.comp_list.index(component)] = values[component]
         values_to_set = tuple(values_to_set)
         self.COMObject.ComponentMolarFraction.SetValues(values_to_set, "")
 
-    def get_connections(self):
-        upstream   = [i for i in self.COMObject.UpstreamOpers]
-        downstream = [i for i in self.COMObject.DownstreamOpers]
-        return {"Upstream": upstream, "Downstream": downstream}
-    
-    
-class EnergyStream:
+class EnergyStream(ProcessStream):
     def __init__(self, COMObject):
         """"
         Reads the COMObject from the simulation
         """
-        self.COMObject = COMObject
+        super().__init__(COMObject)
+        
+    def get_power(self, units = "kW"):
+        return self.COMObject.Power.GetValue(units)
+    
+    def set_power(self, value, units = "kW"):
+        assert self.COMObject.Power.State == 1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            self.COMObject.Power.SetValue(-32767.0, "kW")
+        else:
+            self.COMObject.Power.SetValue(value, units)
             
+
+class ProcessUnit:
+    def __init__(self, COMObject):
+        self.COMObject      = COMObject 
+        self.classification = self.COMObject.ClassificationName
+        self.name           = self.COMObject.name
+
+class HeatExchanger(ProcessUnit):
+    def __init__(self, COMObject):
+        super().__init__(COMObject)
+        assert self.classification == "Heat Transfer Equipment"
+        self.connections = self.get_connections()
+        
+    def get_connections(self) -> dict:
+        feed            = self.COMObject.FeedStream.name
+        product         = self.COMObject.ProductStream.name
+        energy_stream   = self.COMObject.EnergyStream.name 
+        return {"Feed": feed, "Product": product, 
+                "Energy stream": energy_stream}
+    
+    def get_pressuredrop(self, units = "bar"):
+        return self.COMObject.PressureDrop.GetValue(units)
+    
+    def set_pressuredrop(self, value, units = "bar"):
+        assert self.COMObject.PressureDrop.State == 1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            self.COMObject.PressureDrop.SetValue(-32767.0, "bar")
+        else:
+            self.COMObject.PressureDrop.SetValue(value, units)
+            
+    def get_deltaT(self, units = "K"):
+        return self.COMObject.DeltaT.GetValue(units)
+
+    def set_deltaT(self, value, units = "K"):
+        assert self.COMObject.DeltaT.State == 1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            self.COMObject.DeltaT.SetValue(-32767.0, "K")
+        else:
+            self.COMObject.DeltaT.SetValue(value, units)
+            
+
+
+
