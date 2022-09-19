@@ -12,8 +12,6 @@ class Simulation:
         Inputs:
             - path: String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
         """
-        dictionary_units = {"Heat Transfer Equipment": HeatExchanger,
-                            "Prebuilt Column": DistillationColumn}
         self.app = win32.Dispatch("HYSYS.Application")
         if path == "Active":
             self.case = self.app.ActiveDocument
@@ -24,17 +22,17 @@ class Simulation:
         self.thermo_package = self.case.Flowsheet.FluidPackage.PropertyPackageName
         self.comp_list      = [i.name for i in self.case.Flowsheet.FluidPackage.Components]
         self.Solver         = self.case.Solver
-        self.Operations     = {str(i):dictionary_units[i.ClassificationName](i) if i.ClassificationName 
-                               in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
-        self.MatStreams     = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
-        self.EnerStreams    = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
+        self.update_flowsheet()
         
     def update_flowsheet(self) -> None:
         """
         In case you have created/deleted streams or units, this recalculates the operations, mass streams, and energy streams. 
         """
-        self.Operations     = {str(i):i for i in self.case.Flowsheet.Operations}
-        self.MatStreams     = {str(i):MaterialStream(i) for i in self.case.Flowsheet.MaterialStreams}
+        dictionary_units = {"Heat Transfer Equipment": HeatExchanger,
+                            "Prebuilt Column": DistillationColumn}
+        self.Operations     = {str(i):dictionary_units[i.ClassificationName](i) if i.ClassificationName 
+                               in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
+        self.MatStreams     = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
         self.EnerStreams    = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
     
     def set_visible(self, visibility:int = 0) -> None:
@@ -339,7 +337,7 @@ class DistillationColumn(ProcessUnit):
             self.column_flowsheet.Reset()
         self.column_flowsheet.Run()
     
-    def get_convergence(self) -> None:
+    def get_convergence(self) -> bool:
         return self.column_flowsheet.Cfsconverged
     
     def get_specifications(self) -> None:

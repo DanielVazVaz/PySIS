@@ -56,7 +56,7 @@ properties_to_read = {
     "MolarFlow": "kgmole/h"
 }
 
-read_properties = Flowsheet.MatStreams[name_stream].get_properties(properties_to_read)
+read_properties = Flowsheet.MatStreams[name_stream].get_property(properties_to_read)
 print(read_properties)
 ```
 
