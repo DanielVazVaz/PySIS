@@ -11,7 +11,7 @@ setup(name='pysis',
       author_email='daniel.vazquez.vazquez@chem.ethz.ch',
       license='MIT',
       packages=['pysis'],
-      install_requires=['pywin32==225'],
+      install_requires=['pywin32>=225'],
       extras_require = {
           "dev": [
               "build",
