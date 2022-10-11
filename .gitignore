@@ -2,3 +2,5 @@ Local
 pysis/__pycache__
 venv
 pysis.egg-info
+.vscode
+docs/_build
