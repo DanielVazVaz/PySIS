@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import win32com.client as win32
 import os 
 
 class Simulation:
@@ -10,7 +9,9 @@ class Simulation:
 
         Args:
             path (str): String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
-        """        
+        """      
+        import win32com.client as win32  
+        
         self.app = win32.Dispatch("HYSYS.Application")
         if path == "Active":
             self.case = self.app.ActiveDocument
