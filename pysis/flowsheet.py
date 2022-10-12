@@ -1,16 +1,13 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import win32com.client as win32
 import os 
 
 class Simulation:
-    def __init__(self, path: str) -> None:
-        """Connects to a given simulation.
+    """Connects to a given simulation.
 
-        Args:
-            path (str): String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
-        """        
+    Args:
+        path (str): String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
+    """ 
+    def __init__(self, path: str) -> None:       
         self.app = win32.Dispatch("HYSYS.Application")
         if path == "Active":
             self.case = self.app.ActiveDocument
@@ -71,15 +68,13 @@ class Simulation:
         return f"File: {self.file_name}\nThermodynamical package: {self.thermo_package}\nComponent list: {self.comp_list}"
 
 class ProcessStream:
-    """Superclass of all streams in the process.
-    """    
-    def __init__(self, COMObject):
-        """Initializes the process stream from a COMObject. Gets the connections and the name of the stream, as
-        well as the COMObject.
+    """Superclass of all streams in the process.Initializes the process stream from a COMObject. Gets the connections and the name of the stream, as
+    well as the COMObject.
 
-        Args:
-            COMObject (COMObject): COMObject of the HYSYS process stream.
-        """        
+    Args:
+        COMObject (COMObject): COMObject of the HYSYS process stream.
+    """    
+    def __init__(self, COMObject) -> None:     
         self.COMObject   = COMObject 
         self.connections = self.get_connections()
         self.name        = self.COMObject.name
@@ -95,18 +90,18 @@ class ProcessStream:
         return {"Upstream": upstream, "Downstream": downstream}
     
 class MaterialStream(ProcessStream):
-    def __init__(self, COMObject, comp_list: list):
-        """Reads the COMObjectfrom the simulation. This class designs a material stream, which has a series
-        of properties.
+    """Reads the COMObjectfrom the simulation. This class designs a material stream, which has a series
+    of properties.
 
-        Args:
-            COMObject (COMObject): HYSYS COMObject.
-            comp_list (list): List of components in the process stream.
-        """        
+    Args:
+        COMObject (COMObject): HYSYS COMObject.
+        comp_list (list): List of components in the process stream.
+    """ 
+    def __init__(self, COMObject, comp_list: list):       
         super().__init__(COMObject)
         self.comp_list = comp_list
         
-    def get_property(self, property_dict: dict) -> dict:
+    def get_properties(self, property_dict: dict) -> dict:
         """Specify a dictionary with different properties and the units you desire for them.
         Get the properties returned in another dict. 
 
@@ -145,7 +140,7 @@ class MaterialStream(ProcessStream):
             print(f"WARNING. The following properties were not found: {properties_not_found}")
         return result_dict
     
-    def set_property(self, property_dict: dict) -> None:
+    def set_properties(self, property_dict: dict) -> None:
         """Specify a dictionary with different properties and the units you desire for them.
         Set the properties returned in another dict. If some of the properties fail to be set 
         (Normally because the property is not free), then it will stop and return an AssertionError. 
@@ -375,12 +370,12 @@ class MaterialStream(ProcessStream):
         self.COMObject.ComponentMolarFraction.SetValues(values_to_set, "")
 
 class EnergyStream(ProcessStream):
-    def __init__(self, COMObject):
-        """Reads the COMObject from the simulation. This class designs an energy stream.
+    """Reads the COMObject from the simulation. This class designs an energy stream.
 
-        Args:
-            COMObject (COMObject): Object from the HYSYS simulation.
-        """        
+    Args:
+        COMObject (COMObject): Object from the HYSYS simulation.
+    """      
+    def __init__(self, COMObject):  
         super().__init__(COMObject)
         
     def get_power(self, units: str = "kW") -> float:
@@ -409,24 +404,24 @@ class EnergyStream(ProcessStream):
             
 
 class ProcessUnit:
-    def __init__(self, COMObject):
-        """Superclass for all process units in the flowsheet. Contains the classification of the unit,
-        the COMObject, and the name.
+    """Superclass for all process units in the flowsheet. Contains the classification of the unit,
+    the COMObject, and the name.
 
-        Args:
-            COMObject (COMObject): COMObject from HYSYS.
-        """        
+    Args:
+        COMObject (COMObject): COMObject from HYSYS.
+    """        
+    def __init__(self, COMObject):
         self.COMObject      = COMObject 
         self.classification = self.COMObject.ClassificationName
         self.name           = self.COMObject.name
 
 class HeatExchanger(ProcessUnit):
-    def __init__(self, COMObject):
-        """Child of process unit. Includes the connections of the heat exchanger.
+    """Child of process unit. Includes the connections of the heat exchanger.
 
-        Args:
-            COMObject (COMObject): COMObject from HYSYS.
-        """        
+    Args:
+        COMObject (COMObject): COMObject from HYSYS.
+    """
+    def __init__(self, COMObject):        
         super().__init__(COMObject)
         assert self.classification == "Heat Transfer Equipment"
         self.connections = self.get_connections()
@@ -493,13 +488,13 @@ class HeatExchanger(ProcessUnit):
             self.COMObject.DeltaT.SetValue(value, units)
             
 class DistillationColumn(ProcessUnit):
-    def __init__(self, COMObject):
-        """Child of process unit. It contains the COMObject, the ColumnFlowsheet, and the
-        Main Tower. In some thermodynamic packages, it seems that the main tower is not available.
+    """Child of process unit. It contains the COMObject, the ColumnFlowsheet, and the
+    Main Tower. In some thermodynamic packages, it seems that the main tower is not available.
 
-        Args:
-            COMObject (COMObject): COMObject from HYSYS.
-        """        
+    Args:
+        COMObject (COMObject): COMObject from HYSYS.
+    """ 
+    def __init__(self, COMObject):       
         super().__init__(COMObject)
         self.column_flowsheet = self.COMObject.ColumnFlowsheet
         try:
@@ -568,7 +563,7 @@ class DistillationColumn(ProcessUnit):
                          "Goal": i.Goal.GetValue(),
                          "Current value": i.Current.GetValue()} for i in self.column_flowsheet.specifications}
     
-    def set_specification(self, spec: str, value: float, units: str = None) -> None:
+    def set_specifications(self, spec: str, value: float, units: str = None) -> None:
         """Sets the goal value of a specification.
 
         Args:
