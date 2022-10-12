@@ -1,6 +1,6 @@
 # PySIS
 
-[![Documentation Status](https://readthedocs.org/projects/pysis-docs/badge/?version=latest)](https://pysis-docs.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/pysis-doc/badge/?version=latest)](https://pysis-doc.readthedocs.io/en/latest/?badge=latest)
 
 Abstraction layer over the COM HYSYS interface using Python. Allows for the use of functions without having to step to COM level, which is sometimes esoteric. Maintains the whole functionality of the COM objects, since these are loaded as attributes of the superclass.
 
