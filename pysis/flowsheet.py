@@ -103,7 +103,7 @@ class MaterialStream(ProcessStream):
         
     def get_properties(self, property_dict: dict) -> dict:
         """Specify a dictionary with different properties and the units you desire for them.
-        Get the properties returned in another dict. 
+        Get the properties returned in another dict.
 
         Args:
             property_dict (dict): Dictionary of properties to get. The format is {"PropertyName":"Units"}. For properties
@@ -130,21 +130,22 @@ class MaterialStream(ProcessStream):
                 result_dict[og_property] = self.get_compmassflow(units)
             elif property == "COMPMOLARFLOW" or property == "COMPONENT_MOLAR_FLOW":
                 result_dict[og_property] = self.get_compmolarflow(units)
-            elif property == "MASSFRACTION" or property == "MASS_FRACTION":
+            elif property == "COMPMASSFRACTION" or property == "COMPONENT_MASS_FRACTION":
                 result_dict[og_property] = self.get_compmassfraction()
-            elif property == "MOLARFRACTION" or property == "MOLAR_FRACTION":
+            elif property == "COMPMOLARFRACTION" or property == "COMPONENT_MOLAR_FRACTION":
                 result_dict[og_property] = self.get_compmolarfraction()
             else:
                 properties_not_found.append(og_property)
         if properties_not_found:
-            print(f"WARNING. The following properties were not found: {properties_not_found}")
+            valid_properties = ["PRESSURE", "TEMPERATURE", "MASSFLOW", "MOLARFLOW", "COMPMASSFLOW", "COMPMOLARFLOW", "COMPMASSFRACTION", "COMPMOLARFRACTION"]
+            print(f"WARNING. The following properties were not found: {properties_not_found}\nThe valid properties are: {valid_properties}")
         return result_dict
     
     def set_properties(self, property_dict: dict) -> None:
         """Specify a dictionary with different properties and the units you desire for them.
         Set the properties returned in another dict. If some of the properties fail to be set 
         (Normally because the property is not free), then it will stop and return an AssertionError. 
-        Any property after hte one that fails is not set.
+        Any property after the one that fails is not set.
 
         Args:
             property_dict (dict): Each element of the dict must be a tuple with (value:float, units:string). For the
@@ -179,7 +180,8 @@ class MaterialStream(ProcessStream):
             else:
                 properties_not_found.append(og_property)
         if properties_not_found:
-            print(f"WARNING. The following properties were not found: {properties_not_found}")
+            valid_properties = ["PRESSURE", "TEMPERATURE", "MASSFLOW", "MOLARFLOW", "COMPMASSFLOW", "COMPMOLARFLOW", "COMPMASSFRACTION", "COMPMOLARFRACTION"]
+            print(f"WARNING. The following properties were not found: {properties_not_found}\nThe valid properties are: {valid_properties}")
             
     def get_pressure(self, units: str = "bar") -> float:
         """Read the pressure.
