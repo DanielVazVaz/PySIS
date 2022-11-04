@@ -5,7 +5,7 @@ class Simulation:
 
     Args:
         path (str): String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
-    """ 
+    """
     def __init__(self, path: str) -> None:  
         import win32com.client as win32     
         self.app = win32.Dispatch("HYSYS.Application")
@@ -18,14 +18,17 @@ class Simulation:
         self.thermo_package = self.case.Flowsheet.FluidPackage.PropertyPackageName
         self.comp_list      = [i.name for i in self.case.Flowsheet.FluidPackage.Components]
         self.Solver         = self.case.Solver
+        self.ReactionSets = {i.name:i for i in self.case.BasisManager.ReactionPackageManager.ReactionSets}
         self.update_flowsheet()
         
     def update_flowsheet(self) -> None:
         """In case you have created/deleted streams or units, this recalculates the operations, mass streams, and energy streams.
         """        
-        dictionary_units = {"Heat Transfer Equipment": HeatExchanger,
-                            "Prebuilt Column": DistillationColumn}
-        self.Operations     = {str(i):dictionary_units[i.ClassificationName](i) if i.ClassificationName 
+        dictionary_units = {"heaterop": HeatExchanger,
+                            "coolerop": HeatExchanger,
+                            "distillation": DistillationColumn,
+                            "pfreactorop": PFR}
+        self.Operations     = {str(i):dictionary_units[i.TypeName](i) if i.TypeName 
                                in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
         self.MatStreams     = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
         self.EnerStreams    = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
@@ -574,8 +577,113 @@ class DistillationColumn(ProcessUnit):
             units (str, optional): Units of the specification. Defaults to None.
         """        
         self.column_flowsheet.specifications[spec].Goal.SetValue(value, units)
-        
-            
 
+class PFR(ProcessUnit):
+    """Plug flow reactor. 
+
+    Args:
+        COMObject (COMObject): COMObject from HYSYS
+    """    
+    def __init__(self, COMObject):
+        super().__init__(COMObject)
+        self.connections = self.get_connections()
+        
+    def get_connections(self) -> dict:
+        """Get the connections of the reactor
+
+        Returns:
+            dict: Returns the connections
+        """        
+        feed = [i.name for i in self.COMObject.Feeds]
+        product = self.COMObject.Product.name
+        energy  = self.COMObject.EnergyStream.name
+        return {"Feed": feed, "Product": product, "EnergyStream": energy}
+    
+    def modify_feed(self, stream_group: list, movement: str) -> None:
+        """Modifies the feed streams. Adds or removes a bunch of feed streams
+
+        Args:
+            stream_group (list): List of names of the feed streams to modify 
+            movement (str): Either "Add" or "Remove"
+        """
+        movement = movement.upper()
+        for stream in stream_group:
+            if movement == "ADD":
+                self.COMObject.Feeds.Add(stream)
+            elif movement == "REMOVE":
+                self.COMObject.Feeds.Remove(stream)
+            else:
+                print("Movement not valid. Choose either ADD or REMOVE")
+                
+    def modify_product(self, product_stream: "COMObject") -> None:
+        """States which is the product stream. It cannot be left empty
+        as far as I know. 
+
+        Args:
+            product_stream (COMObject): COMObject which will be the product. You can get
+            it from the flowsheet object, MatStreams dictionary, name of the stream, COMObject.
+            For example: FS.MatStreams["Stream1"].COMObject
+        """
+        self.COMObject.Product = product_stream
+        
+    def get_reactionset(self) -> str:
+        """Reads the name of the reaction set
+
+        Returns:
+            str: Name of the reaction set.
+        """
+        return self.COMObject.ReactionSet.name
+    
+    def set_reactionset(self, rxn_set: "COMObject") -> None:
+        """Sets the reaction set to use
+
+        Args:
+            rxn_set (COMObject): COMObject of the reaction set. Tends to be in
+            the flowsheet object, FS.ReactionSets dictionary. Use the name to access it
+        """       
+        self.COMObject.ReactionSet = rxn_set 
+
+    def get_volume(self, units:str = "m3") -> float:
+        return self.COMObject.TotalVolume.GetValue(units)
+    def set_volume(self, value:float, units:str = "m3") -> None:
+        assert self.COMObject.TotalVolume.State == 1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            value = -32767.0
+        self.COMObject.TotalVolume.SetValue(value, units)
+    def get_length(self, units: str = "m") -> float:
+        return self.COMObject.TubeLength.GetValue(units)
+    def set_length(self, value:float, units:str = "m") -> None:
+        assert self.COMObject.TubeLength.State ==1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            value = -32767.0
+        self.COMObject.TubeLength.SetValue(value, units)
+    def get_diameter(self, units:str = "m") -> float:
+        return self.COMObject.TubeDiameter.GetValue(units)
+    def set_diameter(self, value:float, units:str = "m"):
+        assert self.COMObject.TubeDiameter.State == 1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            value = -32767.0
+        self.COMObject.TubeDiameter.SetValue(value, units)
+    def get_ntubes(self) -> float:
+        return self.COMObject.NumberOfTubes
+    def set_ntubes(self, value:int) -> None:
+        if value == "empty":
+            value = -32767.0
+        self.COMObject.NumberOfTubes = value
+    def get_voidfraction(self) -> float:
+        return self.COMObject.VoidFraction
+    def set_voidfraction(self, value:float) -> None:
+        if value == "empty":
+            value = -32767.0
+        self.COMObject.VoidFraction = value
+    def get_voidvolume(self, units = "m3") -> float:
+        return self.COMObject.VoidVolume.GetValue(units)
+    def set_voidvolume(self, value:float, units:str = "m3") -> None:
+        assert self.COMObject.VoidVolume.State == 1, "The variable is calculated. Cannot modify it."
+        if value == "empty":
+            value = -32767.0
+        self.COMObject.VoidVolume.SetValue(value, units)
+    
+        
 
 
