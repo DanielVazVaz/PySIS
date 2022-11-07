@@ -644,45 +644,188 @@ class PFR(ProcessUnit):
         self.COMObject.ReactionSet = rxn_set 
 
     def get_volume(self, units:str = "m3") -> float:
+        """Returns the volume of the unit
+
+        Args:
+            units (str, optional): Defaults to "m3".
+
+        Returns:
+            float: Volume in the specified units
+        """        
         return self.COMObject.TotalVolume.GetValue(units)
     def set_volume(self, value:float, units:str = "m3") -> None:
+        """Sets the volume of the unit
+
+        Args:
+            value (float): Value to set
+            units (str, optional): Defaults to "m3".
+        """        
         assert self.COMObject.TotalVolume.State == 1, "The variable is calculated. Cannot modify it."
         if value == "empty":
             value = -32767.0
         self.COMObject.TotalVolume.SetValue(value, units)
     def get_length(self, units: str = "m") -> float:
+        """Returns the length of the unit
+
+        Args:
+            units (str, optional): Defaults to "m".
+
+        Returns:
+            float: Length of the tubes in the specified units
+        """        
         return self.COMObject.TubeLength.GetValue(units)
     def set_length(self, value:float, units:str = "m") -> None:
+        """Set the length of the unit
+
+        Args:
+            value (float): Value to set
+            units (str, optional): Defaults to "m".
+        """        
         assert self.COMObject.TubeLength.State ==1, "The variable is calculated. Cannot modify it."
         if value == "empty":
             value = -32767.0
         self.COMObject.TubeLength.SetValue(value, units)
     def get_diameter(self, units:str = "m") -> float:
+        """Returns the diameter of the unit
+
+        Args:
+            units (str, optional): Defaults to "m".
+
+        Returns:
+            float: Diameter of the tubes in the specified units
+        """        
         return self.COMObject.TubeDiameter.GetValue(units)
     def set_diameter(self, value:float, units:str = "m"):
+        """Set the diameter of the unit
+
+        Args:
+            value (float): Value to set
+            units (str, optional): Defaults to "m".
+        """        
         assert self.COMObject.TubeDiameter.State == 1, "The variable is calculated. Cannot modify it."
         if value == "empty":
             value = -32767.0
         self.COMObject.TubeDiameter.SetValue(value, units)
-    def get_ntubes(self) -> float:
+    def get_ntubes(self) -> int:
+        """Return the number of tubes
+
+        Returns:
+            float: Return the number of tubes
+        """        
         return self.COMObject.NumberOfTubes
     def set_ntubes(self, value:int) -> None:
+        """Set the number of tubes
+
+        Args:
+            value (int): Value to set
+        """        
         if value == "empty":
             value = -32767.0
         self.COMObject.NumberOfTubes = value
     def get_voidfraction(self) -> float:
+        """Return the void fraction
+
+        Returns:
+            float: Void fraction
+        """        
         return self.COMObject.VoidFraction
     def set_voidfraction(self, value:float) -> None:
+        """Set the void fraction
+
+        Args:
+            value (float): Value to set
+        """        
         if value == "empty":
             value = -32767.0
         self.COMObject.VoidFraction = value
     def get_voidvolume(self, units = "m3") -> float:
+        """Return the void volume
+
+        Args:
+            units (str, optional): Defaults to "m3".
+
+        Returns:
+            float: Void volume in the specified units
+        """        
         return self.COMObject.VoidVolume.GetValue(units)
     def set_voidvolume(self, value:float, units:str = "m3") -> None:
+        """Sets the void volume
+
+        Args:
+            value (float): Value to set
+            units (str, optional): Defaults to "m3".
+        """        
         assert self.COMObject.VoidVolume.State == 1, "The variable is calculated. Cannot modify it."
         if value == "empty":
             value = -32767.0
         self.COMObject.VoidVolume.SetValue(value, units)
+        
+    def get_properties(self, property_dict:dict) -> dict:
+        """Get a number of properties. Allowed keys are VOLUME, REACTIONSET, TUBELENGTH, TUBEDIAMETER,
+        NUMBEROFTUBES, VOIDFRACTION, and VOIDVOLUME.
+
+        Args:
+            prop_dict (dict): Dictionary of the desired property. Each element has to have a string indicating the units. For the
+            properties that do not have a unit, i.e., VOIDFRACTION and NUMBEROFTUBES, leave the unit an empty string, or None.
+
+        Returns:
+            dict: Dictionary with the properties as keys and the value in the specified units as value
+        """
+        result_dict = {}
+        properties_not_found = []
+        unitless_properties = ["REACTIONSET", "VOIDFRACTION", "NUMBEROFTUBES"]
+        function_property_dict = {"VOLUME": self.get_volume, "REACTIONSET": self.get_reactionset, "TUBELENGTH": self.get_length,
+                                  "TUBEDIAMETER": self.get_diameter, "NUMBEROFTUBES": self.get_ntubes, "VOIDFRACTION": self.get_voidfraction, 
+                                  "VOIDVOLUME": self.get_voidvolume}
+        for property in property_dict:
+            units =  property_dict[property]
+            og_property = property 
+            property = property.upper()
+            if property in function_property_dict:
+                if property not in unitless_properties:
+                    result_dict[og_property] = function_property_dict[property](units)
+                else:
+                    result_dict[og_property] = function_property_dict[property]()
+            else:
+                properties_not_found.append(og_property)
+                
+        if properties_not_found:
+                print(f"WARNING. The following properties were not found: {properties_not_found}\nThe valid properties are: {list(function_property_dict.keys())}")
+        
+        return result_dict
+    
+    def set_properties(self, property_dict:dict) -> None:
+        """Set a number of properties. Allowed keys are VOLUME, REACTIONSET, TUBELENGTH, TUBEDIAMETER,
+        NUMBEROFTUBES, VOIDFRACTION, and VOIDVOLUME.
+
+        Args:
+            prop_dict (dict): Dictionary of the desired property. Each element has to have a tuple indicating the value and units, i.e., (value,units). 
+            For the properties that do not have a unit, i.e., VOIDFRACTION and NUMBEROFTUBES, use an empty string or None as the unit.
+        """   
+        result_dict = {}
+        properties_not_found = []
+        unitless_properties = ["REACTIONSET", "VOIDFRACTION", "NUMBEROFTUBES"]
+        function_property_dict = {"VOLUME": self.set_volume, "REACTIONSET": self.set_reactionset, "TUBELENGTH": self.set_length,
+                                  "TUBEDIAMETER": self.set_diameter, "NUMBEROFTUBES": self.set_ntubes, "VOIDFRACTION": self.set_voidfraction, 
+                                  "VOIDVOLUME": self.set_voidvolume}
+        for property in property_dict:
+            units =  property_dict[property][1]
+            value = property_dict[property][0]
+            og_property = property 
+            property = property.upper()
+            if property in function_property_dict:
+                if property not in unitless_properties:
+                    result_dict[og_property] = function_property_dict[property](value, units)
+                else:
+                    result_dict[og_property] = function_property_dict[property](value)
+            else:
+                properties_not_found.append(og_property)
+                
+        if properties_not_found:
+                print(f"WARNING. The following properties were not found: {properties_not_found}\nThe valid properties are: {list(function_property_dict.keys())}")
+
+        
+        
     
         
 
