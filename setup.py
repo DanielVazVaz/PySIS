@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf8", errors='ignore') as fh:
     long_description = fh.read()
 
 setup(name='pysis',
-      version='0.1.0',
+      version='0.1.1',
       description='Abstract layer over Aspen HYSYS using Python',
       url='https://github.com/DanielVazVaz/PySIS',
       author='Daniel Vázquez Vázquez',
