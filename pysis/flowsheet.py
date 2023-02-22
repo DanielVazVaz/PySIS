@@ -596,7 +596,10 @@ class PFR(ProcessUnit):
         """        
         feed = [i.name for i in self.COMObject.Feeds]
         product = self.COMObject.Product.name
-        energy  = self.COMObject.EnergyStream.name
+        try:
+            energy = self.COMObject.EnergyStream.name
+        except:
+            energy = None
         return {"Feed": feed, "Product": product, "EnergyStream": energy}
     
     def modify_feed(self, stream_group: list, movement: str) -> None:
