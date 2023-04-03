@@ -6,9 +6,12 @@ class Simulation:
     Args:
         path (str): String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
     """
-    def __init__(self, path: str) -> None:  
-        import win32com.client as win32     
-        self.app = win32.Dispatch("HYSYS.Application")
+    def __init__(self, path: str, version:float = None) -> None:  
+        import win32com.client as win32   
+        if not version:
+            self.app = win32.Dispatch("HYSYS.Application")
+        else:
+            self.app = win32.Dispatch("HYSYS.Application.V"+"{v}".format(v=version))
         if path == "Active":
             self.case = self.app.ActiveDocument
         else:
