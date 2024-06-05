@@ -4,7 +4,7 @@
 
 Abstraction layer over the COM HYSYS interface using Python. Allows for the use of functions without having to step to COM level, which is sometimes esoteric. Maintains the whole functionality of the COM objects, since these are loaded as attributes of the superclass.
 
-As of now, it is checked to work with `Aspen HYSYS V11`. No idea if it works with `Aspen HYSYS V12`.
+As of now, it is checked to work with `Aspen HYSYS V11`, `Aspen HYSYS V12`, and `Aspen HYSYS V14`.
 
 ## Installation
 

@@ -4,11 +4,11 @@ with open("README.md", "r", encoding="utf8", errors='ignore') as fh:
     long_description = fh.read()
 
 setup(name='pysis',
-      version='0.1.1',
+      version='0.1.2',
       description='Abstract layer over Aspen HYSYS using Python',
       url='https://github.com/DanielVazVaz/PySIS',
       author='Daniel Vázquez Vázquez',
-      author_email='daniel.vazquez.vazquez@chem.ethz.ch',
+      author_email='daniel.vazquez@iqs.url.edu',
       license='MIT',
       packages=['pysis'],
       install_requires=['pywin32>=225'],

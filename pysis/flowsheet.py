@@ -6,7 +6,29 @@ class Simulation:
     Args:
         path (str): String with the raw path to the HYSYS file. If "Active", chooses the open HYSYS flowsheet.
         version (float): HYSYS version number. For example, for HYSYS version 11, it will be 11.0.. Defaults to None.
+
+    Attributes:
+        app: HYSYS application object.
+        case: HYSYS simulation case object.
+        file_name (str): Name of the HYSYS file.
+        thermo_package (str): Name of the thermodynamic package used in the simulation.
+        comp_list (list): List of component names in the simulation.
+        Solver: HYSYS solver object.
+        ReactionSets (dict): Dictionary of reaction sets in the simulation.
+        Operations (dict): Dictionary of operations in the simulation.
+        MatStreams (dict): Dictionary of material streams in the simulation.
+        EnerStreams (dict): Dictionary of energy streams in the simulation.
+
+    Methods:
+        update_flowsheet: Updates the references to the operations, material streams, and energy streams.
+        set_visible: Sets the visibility of the flowsheet.
+        solver_state: Sets if the solver is active or not.
+        close: Closes the instance and the HYSYS connection.
+        save: Saves the current state of the flowsheet.
+        __str__: Returns the basic information of the flowsheet.
+
     """
+
     def __init__(self, path: str, version:float = None) -> None:  
         import win32com.client as win32   
         if not version:
@@ -26,26 +48,40 @@ class Simulation:
         self.update_flowsheet()
         
     def update_flowsheet(self) -> None:
-        """In case you have created/deleted streams or units, this recalculates the operations, mass streams, and energy streams.
-        """        
+        """Updates the references to the operations, mass streams, and energy streams in the flowsheet.
+
+        This method should be called in case you have created or deleted streams or units in the flowsheet.
+        It updates the references to the operations, mass streams, and energy streams based on the changes made.
+
+        Returns:
+            None
+        """
         dictionary_units = {"heaterop": HeatExchanger,
                             "coolerop": HeatExchanger,
                             "distillation": DistillationColumn,
                             "pfreactorop": PFR}
-        self.Operations     = {str(i):dictionary_units[i.TypeName](i) if i.TypeName 
+        self.Operations      = {str(i):dictionary_units[i.TypeName](i) if i.TypeName 
                                in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
-        self.MatStreams     = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
-        self.EnerStreams    = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
-    
+        self.MatStreams      = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
+        self.EnerStreams     = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
+        self.InputMatStreams = {}
+        self.ProductMatStreams = {}
+        for stream in self.MatStreams:
+            name = self.MatStreams[stream].name
+            connections = self.MatStreams[stream].get_connections()
+            if "FeederBlock_{0}".format(name) in connections["Upstream"]:
+                self.InputMatStreams[name] = self.MatStreams[stream]
+            if "ProductBlock_{0}".format(name) in connections["Downstream"]:
+                self.ProductMatStreams[name] = self.MatStreams[stream]
     def set_visible(self, visibility:int = 0) -> None:
         """Sets the visibility of the flowsheet.
 
         Args:
-            visibility (int, optional): If 1, it shows the flowsheet. If 0, it keeps it invisible.. Defaults to 0.
+            visibility (int, optional): If 1, it shows the flowsheet. If 0, it keeps it invisible. Defaults to 0.
         """        
         self.case.Visible = visibility
         
-    def solver_state(self, state:int = 1) -> None:
+    def solver_state(self, state: int = 1) -> None:
         """Sets if the solver is active or not.
 
         Args:
@@ -55,7 +91,7 @@ class Simulation:
         
     def close(self) -> None:
         """Closes the instance and the HYSYS connection. If you do not close it,
-        the task will remain and you will have to stop it from the task manage.
+        the task will remain and you will have to stop it from the task manager.
         """        
         self.case.Close()
         self.app.quit()
@@ -63,23 +99,34 @@ class Simulation:
     
     def save(self) -> None:
         """Saves the current state of the flowsheet.
+
+        This method saves the current state of the flowsheet by calling the `Save` method of the `case` object.
         """        
         self.case.Save()
         
     def __str__(self) -> str:
-        """Prints the basic information of the flowsheet.
+        """Returns a string representation of the flowsheet.
+
+        This method returns a string that contains the basic information of the flowsheet,
+        including the file name, thermodynamical package, and component list.
 
         Returns:
-            str: Information of the flowsheet. 
+            str: A string representation of the flowsheet.
         """        
         return f"File: {self.file_name}\nThermodynamical package: {self.thermo_package}\nComponent list: {self.comp_list}"
 
 class ProcessStream:
-    """Superclass of all streams in the process.Initializes the process stream from a COMObject. Gets the connections and the name of the stream, as
-    well as the COMObject.
+    """Superclass of all streams in the process.
+
+    Initializes the process stream from a COMObject. Gets the connections and the name of the stream, as well as the COMObject.
 
     Args:
         COMObject (COMObject): COMObject of the HYSYS process stream.
+
+    Attributes:
+        COMObject (COMObject): The COMObject of the HYSYS process stream.
+        connections (dict): A dictionary of the upstream and downstream connections.
+        name (str): The name of the process stream.
     """    
     def __init__(self, COMObject) -> None:     
         self.COMObject   = COMObject 
@@ -90,7 +137,9 @@ class ProcessStream:
         """Stores the connections of the process stream into a dictionary.
 
         Returns:
-            dict: Returns a dictionary of the upstream and downstream connections
+            dict: Returns a dictionary of the upstream and downstream connections.
+                The dictionary has two keys: "Upstream" and "Downstream".
+                The value for each key is a list of names of the connected operations.
         """        
         upstream   = [i.name for i in self.COMObject.UpstreamOpers]
         downstream = [i.name for i in self.COMObject.DownstreamOpers]
@@ -103,6 +152,26 @@ class MaterialStream(ProcessStream):
     Args:
         COMObject (COMObject): HYSYS COMObject.
         comp_list (list): List of components in the process stream.
+
+    Methods:
+        get_properties: Gets the properties of the material stream.
+        set_properties: Sets the properties of the material stream.
+        get_pressure: Gets the pressure of the material stream.
+        set_pressure: Sets the pressure of the material stream.
+        get_temperature: Gets the temperature of the material stream.
+        set_temperature: Sets the temperature of the material stream.
+        get_massflow: Gets the mass flow of the material stream.
+        set_massflow: Sets the mass flow of the material stream.
+        get_molarflow: Gets the molar flow of the material stream.
+        set_molarflow: Sets the molar flow of the material stream.
+        get_compmassflow: Gets the component mass flow of the material stream.
+        set_compmassflow: Sets the component mass flow of the material stream.
+        get_compmolarflow: Gets the component molar flow of the material stream.
+        set_compmolarflow: Sets the component molar flow of the material stream.
+        get_compmassfraction: Gets the component mass fraction of the material stream.
+        set_compmassfraction: Sets the component mass fraction of the material stream.
+        get_compmolarfraction: Gets the component molar fraction of the material stream.
+        set_compmolarfraction: Sets the component molar fraction of the material stream.
     """ 
     def __init__(self, COMObject, comp_list: list):       
         super().__init__(COMObject)
@@ -114,7 +183,8 @@ class MaterialStream(ProcessStream):
 
         Args:
             property_dict (dict): Dictionary of properties to get. The format is {"PropertyName":"Units"}. For properties
-            without units, i.e., component molar flow and component mass flow, an empty string can be used.
+            without units, i.e., component molar flow and component mass flow, an empty string can be used. The valid properties are
+            "PRESSURE", "TEMPERATURE", "MASSFLOW", "MOLARFLOW", "COMPMASSFLOW", "COMPMOLARFLOW", "COMPMASSFRACTION", "COMPMOLARFRACTION"
 
         Returns:
             dict: Dictionary where the keys are the properties, and the elements are the values read. 
@@ -122,7 +192,11 @@ class MaterialStream(ProcessStream):
         result_dict = {}
         properties_not_found = []
         for property in property_dict:
-            units = property_dict[property]
+            try:
+                units = property_dict[property]
+                result_dict[property] = self.COMObject.Properties(property).GetValue(property_dict[property])
+            except:
+                properties_not_found.append(property)
             og_property = property
             property = property.upper()
             if property == "PRESSURE":
@@ -157,7 +231,8 @@ class MaterialStream(ProcessStream):
         Args:
             property_dict (dict): Each element of the dict must be a tuple with (value:float, units:string). For the
             case of component properties, such as compmassflow, the structure is: (value:dict, unit:string)
-            where the value dictionary has the form {"ComponentName": value}.
+            where the value dictionary has the form {"ComponentName": value}. The valid properties are
+            "PRESSURE", "TEMPERATURE", "MASSFLOW", "MOLARFLOW", "COMPMASSFLOW", "COMPMOLARFLOW", "COMPMASSFRACTION", "COMPMOLARFRACTION"
         """        
         properties_not_found = []
         for property in property_dict:
@@ -383,6 +458,10 @@ class EnergyStream(ProcessStream):
 
     Args:
         COMObject (COMObject): Object from the HYSYS simulation.
+    
+    Methods:
+        get_power: Gets the power of the energy stream.
+        set_power: Sets the power of the energy stream.
     """      
     def __init__(self, COMObject):  
         super().__init__(COMObject)
@@ -418,6 +497,11 @@ class ProcessUnit:
 
     Args:
         COMObject (COMObject): COMObject from HYSYS.
+
+    Attributes:
+        COMObject (COMObject): COMObject from HYSYS.
+        classification (str): Classification of the process unit.
+        name (str): Name of the process unit.
     """        
     def __init__(self, COMObject):
         self.COMObject      = COMObject 
@@ -429,6 +513,16 @@ class HeatExchanger(ProcessUnit):
 
     Args:
         COMObject (COMObject): COMObject from HYSYS.
+
+    Attributes:
+        connections (dict): Dictionary with the feed, product, and energy stream.
+
+    Methods:
+        get_connections: Reads the connections of the process unit.
+        get_pressuredrop: Reads the pressure drop of the unit.
+        set_pressuredrop: Sets the pressure drop of the unit.
+        get_deltaT: Reads the deltaT of the unit.
+        set_deltaT: Sets the deltaT of the unit.
     """
     def __init__(self, COMObject):        
         super().__init__(COMObject)
@@ -502,6 +596,20 @@ class DistillationColumn(ProcessUnit):
 
     Args:
         COMObject (COMObject): COMObject from HYSYS.
+    
+    Attributes:
+        column_flowsheet (COMObject): COMObject of the column flowsheet.
+        main_tower (COMObject): COMObject of the main tower.
+
+    Methods:
+        get_feedtrays: Gets the feedtrays of the column.
+        set_feedtray: Sets the feedtray of the column.
+        get_numberstages: Gets the number of stages of the column.
+        set_numberstages: Sets the number of stages of the column.
+        run: Runs the column subflowsheet.
+        get_convergence: Checks the convergence of the column.
+        get_specifications: Reads the specifications of the column.
+        set_specifications: Sets the specifications of the column.
     """ 
     def __init__(self, COMObject):       
         super().__init__(COMObject)
@@ -520,7 +628,7 @@ class DistillationColumn(ProcessUnit):
         return [i.name for i in self.main_tower.FeedStages]
     
     def set_feedtray(self, stream: str, level: int) -> None:
-        """Sets the feedtray. If the solver is deactivated, you willn not see the change. Also,
+        """Sets the feedtray. If the solver is deactivated, you will not see the change. Also,
         it unconverges the column. Remember to run() it afterwards.
 
         Args:
@@ -592,6 +700,31 @@ class PFR(ProcessUnit):
 
     Args:
         COMObject (COMObject): COMObject from HYSYS
+
+    Attributes:
+        connections (dict): Dictionary with the feed, product, and energy stream.
+        reactions (dict): Dictionary with the reactions and their values.
+
+    Methods:
+        get_connections: Gets the connections of the reactor.
+        modify_feed: Modifies the feed streams. Adds or removes a bunch of feed streams.
+        modify_product: States which is the product stream. It cannot be left empty as far as I know.
+        get_reactionset: Reads the name of the reaction set.
+        set_reactionset: Sets the reaction set to use.
+        get_volume: Returns the volume of the unit.
+        set_volume: Sets the volume of the unit.
+        get_length: Returns the length of the unit.
+        set_length: Sets the length of the unit.
+        get_diameter: Returns the diameter of the unit.
+        set_diameter: Sets the diameter of the unit.
+        get_ntubes: Return the number of tubes.
+        set_ntubes: Sets the number of tubes.
+        get_voidfraction: Return the void fraction.
+        set_voidfraction: Sets the void fraction.
+        get_voidvolume: Return the void volume.
+        set_voidvolume: Sets the void volume.
+        get_properties: Specify a dictionary with different properties and the units you desire for them. Get the properties returned in another dict.
+        set_properties: Specify a dictionary with different properties and the units you desire for them. Set the properties returned in another dict.
     """    
     def __init__(self, COMObject):
         super().__init__(COMObject)
@@ -651,7 +784,8 @@ class PFR(ProcessUnit):
 
         Args:
             rxn_set (COMObject): COMObject of the reaction set. Tends to be in
-            the flowsheet object, FS.ReactionSets dictionary. Use the name to access it
+            the flowsheet object, FS.ReactionSets dictionary. Use the name to access it.
+            Consider that the reaction set must be of a compatible type
         """       
         self.COMObject.ReactionSet = rxn_set 
 
