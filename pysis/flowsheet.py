@@ -554,7 +554,9 @@ class DistillationColumn(ProcessUnit):
         self.column_flowsheet.Run()
     
     def get_convergence(self) -> bool:
-        """Checks the convergence of the column.
+        """Checks the convergence of the column. Careful, if you check after changing the 
+        input, such as the feedtray, it does not change from the previous state. Check always after
+        a run()
 
         Returns:
             bool: True if the column is converged. False otherwise.
