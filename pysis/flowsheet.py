@@ -112,9 +112,11 @@ class Simulation:
 
     def change_comp_list(self, fluid_package: "COMObject") -> None:
         """Changes the active component list to that of the fluid_package specified.
+
         Args:
             fluid_package (COMObject): The COMObject of the fluid package to change to. These can be seen in
-            self.fluid_packages"""
+            self.fluid_packages
+        """
 
         self.comp_list = [i.name for i in fluid_package.Components]
         
@@ -185,8 +187,10 @@ class Component:
     
     def get_bp(self, units = "K") -> float:
         """Gets the boiling point of the component.
+
         Args:
             units (str, optional): Units of the boiling point. Defaults to "K".
+
         Returns:
             float: The boiling point of the component in the specified units.
         """
