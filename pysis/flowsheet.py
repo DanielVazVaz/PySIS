@@ -13,10 +13,13 @@ class Simulation:
         file_name (str): Name of the HYSYS file.
         thermo_package (str): Name of the thermodynamic package used in the simulation.
         comp_list (list): List of component names in the simulation.
+        components (dict): Dictionary of components in the simulation, where keys are component names and values are COMObjects.
         Solver: HYSYS solver object.
         ReactionSets (dict): Dictionary of reaction sets in the simulation.
         Operations (dict): Dictionary of operations in the simulation.
         MatStreams (dict): Dictionary of material streams in the simulation.
+        InputMatStreams (dict): Dictionary of input material streams in the simulation.
+        OutputMatStreams (dict): Dictionary of output material streams in the simulation.
         EnerStreams (dict): Dictionary of energy streams in the simulation.
 
     Methods:
@@ -25,6 +28,7 @@ class Simulation:
         solver_state: Sets if the solver is active or not.
         close: Closes the instance and the HYSYS connection.
         save: Saves the current state of the flowsheet.
+        change_comp_list: Changes the active component list to that of the fluid_package specified.
         __str__: Returns the basic information of the flowsheet.
 
     """
@@ -41,8 +45,10 @@ class Simulation:
             file = os.path.abspath(path)
             self.case = self.app.SimulationCases.Open(file)
         self.file_name      = self.case.Title.Value
+        self.fluid_packages = {i.name: i for i in self.case.BasisManager.FluidPackages}
         self.thermo_package = self.case.Flowsheet.FluidPackage.PropertyPackageName
         self.comp_list      = [i.name for i in self.case.Flowsheet.FluidPackage.Components]
+        self.components     = {i.name:Component(i) for i in self.case.Flowsheet.FluidPackage.Components}
         self.Solver         = self.case.Solver
         self.ReactionSets = {i.name:i for i in self.case.BasisManager.ReactionPackageManager.ReactionSets}
         self.update_flowsheet()
@@ -62,17 +68,17 @@ class Simulation:
                             "pfreactorop": PFR}
         self.Operations      = {str(i):dictionary_units[i.TypeName](i) if i.TypeName 
                                in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
-        self.MatStreams      = {str(i):MaterialStream(i, self.comp_list) for i in self.case.Flowsheet.MaterialStreams}
+        self.MatStreams      = {str(i):MaterialStream(i) for i in self.case.Flowsheet.MaterialStreams}
         self.EnerStreams     = {str(i):EnergyStream(i) for i in self.case.Flowsheet.EnergyStreams}
-        self.InputMatStreams = {}
-        self.ProductMatStreams = {}
+        self.InputMatStreams = {str(i): self.MatStreams[i] for i in self.MatStreams if "FeederBlock_{0}".format(self.MatStreams[i].name) in self.MatStreams[i].get_connections()["Upstream"]}
+        self.OutputMatStreams = {str(i): self.MatStreams[i] for i in self.MatStreams if "ProductBlock_{0}".format(self.MatStreams[i].name) in self.MatStreams[i].get_connections()["Downstream"]}
         for stream in self.MatStreams:
             name = self.MatStreams[stream].name
             connections = self.MatStreams[stream].get_connections()
             if "FeederBlock_{0}".format(name) in connections["Upstream"]:
                 self.InputMatStreams[name] = self.MatStreams[stream]
             if "ProductBlock_{0}".format(name) in connections["Downstream"]:
-                self.ProductMatStreams[name] = self.MatStreams[stream]
+                self.OutputMatStreams[name] = self.MatStreams[stream]
     def set_visible(self, visibility:int = 0) -> None:
         """Sets the visibility of the flowsheet.
 
@@ -103,6 +109,14 @@ class Simulation:
         This method saves the current state of the flowsheet by calling the `Save` method of the `case` object.
         """        
         self.case.Save()
+
+    def change_comp_list(self, fluid_package: "COMObject") -> None:
+        """Changes the active component list to that of the fluid_package specified.
+        Args:
+            fluid_package (COMObject): The COMObject of the fluid package to change to. These can be seen in
+            self.fluid_packages"""
+
+        self.comp_list = [i.name for i in fluid_package.Components]
         
     def __str__(self) -> str:
         """Returns a string representation of the flowsheet.
@@ -114,6 +128,79 @@ class Simulation:
             str: A string representation of the flowsheet.
         """        
         return f"File: {self.file_name}\nThermodynamical package: {self.thermo_package}\nComponent list: {self.comp_list}"
+
+class Component:
+    """Component class that represents a component in the HYSYS simulation.
+    
+    Args:
+        COMObject (COMObject): COMObject of the HYSYS component.
+
+    Attributes:
+        COMObject (COMObject): The COMObject of the HYSYS component.
+        name (str): The name of the component.
+        formula (str): The chemical formula of the component.
+        MW (float): The molecular weight of the component.
+    
+    Methods:
+        get_CAS: Gets the CAS number of the component.
+        get_Pc: Gets the critical pressure of the component.
+        get_Tc: Gets the critical temperature of the component.
+        get_bp: Gets the boiling point of the component.
+    """
+    def __init__(self, COMObject) -> None: 
+        self.COMObject = COMObject
+        self.name  = self.COMObject.name
+        self.formula = self.COMObject.Formula.strip()
+        self.MW = self.COMObject.MolecularWeight.GetValue()
+    
+    def get_CAS(self) -> str:
+        """Gets the CAS number of the component. 
+
+        Returns:
+            str: The CAS number of the component.
+        """     
+        return self.COMObject.CAS_Number2
+    
+    def get_Pc(self, units = "Pa") -> float:
+        """Gets the critical pressure of the component.
+
+        Args:
+            units (str, optional): Units of the critical pressure. Defaults to "Pa".
+
+        Returns:
+            float: The critical pressure of the component in the specified units.
+        """        
+        return self.COMObject.CriticalPressure.GetValue(units)
+    
+    def get_Tc(self, units = "K") -> float:
+        """Gets the critical temperature of the component.
+
+        Args:
+            units (str, optional): Units of the critical temperature. Defaults to "K".
+
+        Returns:
+            float: The critical temperature of the component in the specified units.
+        """        
+        return self.COMObject.CriticalTemperature.GetValue(units)
+    
+    def get_bp(self, units = "K") -> float:
+        """Gets the boiling point of the component.
+        Args:
+            units (str, optional): Units of the boiling point. Defaults to "K".
+        Returns:
+            float: The boiling point of the component in the specified units.
+        """
+        return self.COMObject.NormalBoilingPoint.GetValue(units)
+    
+    def get_Antoine_parameters(self) -> tuple:
+        """Gets the Antoine parameters of the component. The equation is as follows:
+        ln(P[kPa]) = a + b/(T[K] + c) + d*ln(T[K]) + e*T^f
+
+        Returns:
+            tuple: A tuple containing the Antoine parameters. It has a lot of them, tho, 
+            from a to j, even though the equation only uses until f.
+        """
+        return self.COMObject.AntoineCoeffs.GetValues("")
 
 class ProcessStream:
     """Superclass of all streams in the process.
@@ -151,7 +238,6 @@ class MaterialStream(ProcessStream):
 
     Args:
         COMObject (COMObject): HYSYS COMObject.
-        comp_list (list): List of components in the process stream.
 
     Methods:
         get_properties: Gets the properties of the material stream.
@@ -173,9 +259,10 @@ class MaterialStream(ProcessStream):
         get_compmolarfraction: Gets the component molar fraction of the material stream.
         set_compmolarfraction: Sets the component molar fraction of the material stream.
     """ 
-    def __init__(self, COMObject, comp_list: list):       
+    def __init__(self, COMObject):       
         super().__init__(COMObject)
-        self.comp_list = comp_list
+        self.components = {i.name:Component(i) for i in self.COMObject.FluidPackage.Components}
+        self.comp_list = list(self.components.keys())
         
     def get_properties(self, property_dict: dict) -> dict:
         """Specify a dictionary with different properties and the units you desire for them.
@@ -192,11 +279,7 @@ class MaterialStream(ProcessStream):
         result_dict = {}
         properties_not_found = []
         for property in property_dict:
-            try:
-                units = property_dict[property]
-                result_dict[property] = self.COMObject.Properties(property).GetValue(property_dict[property])
-            except:
-                properties_not_found.append(property)
+            units = property_dict[property]
             og_property = property
             property = property.upper()
             if property == "PRESSURE":
