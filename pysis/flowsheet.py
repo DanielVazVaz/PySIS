@@ -119,6 +119,76 @@ class Simulation:
         """
 
         self.comp_list = [i.name for i in fluid_package.Components]
+
+    def add_new_material_stream(self, name: str, autoupdate: bool = True) -> None:
+        """Adds a new material stream to the flowsheet.
+
+        Args:
+            name (str): Name of the new material stream.
+            autoupdate (bool, optional): If True, updates the flowsheet dicts after adding the material stream. Defaults to True.
+
+        """
+        self.case.Flowsheet.MaterialStreams.Add(name)
+        if autoupdate:
+            self.update_flowsheet()
+
+    def remove_material_stream(self, name: str, autoupdate: bool = True) -> None:
+        """Removes a material stream from the flowsheet.
+
+        Args:
+            name (str): Name of the material stream to be removed.
+            autoupdate (bool, optional): If True, updates the flowsheet dicts after removing the material stream. Defaults to True.
+        """
+        self.case.Flowsheet.MaterialStreams.Remove(self.MatStreams[name].COMObject)
+        if autoupdate:
+            self.update_flowsheet()
+
+    def add_new_energy_stream(self, name: str, autoupdate: bool = True) -> None:
+        """Adds a new energy stream to the flowsheet.
+
+        Args:
+            name (str): Name of the new energy stream.
+            autoupdate (bool, optional): If True, updates the flowsheet dicts after adding the energy stream. Defaults to True.
+
+        """
+        self.case.Flowsheet.EnergyStreams.Add(name)
+        if autoupdate:
+            self.update_flowsheet()
+
+    def remove_energy_stream(self, name: str, autoupdate: bool = True) -> None:
+        """Removes an energy stream from the flowsheet.
+
+        Args:
+            name (str): Name of the energy stream to be removed.
+            autoupdate (bool, optional): If True, updates the flowsheet dicts after removing the energy stream. Defaults to True.
+        """
+        self.case.Flowsheet.EnergyStreams.Remove(self.EnerStreams[name].COMObject)
+        if autoupdate:
+            self.update_flowsheet()
+
+    def add_new_operation(self, name: str, type_name: str, autoupdate: bool = True) -> None:
+        """Adds a new operation to the flowsheet.
+
+        Args:
+            name (str): Name of the new operation.
+            type_name (str): Type name of the new operation. These can be seen in self.Operations[i].type_name for i in self.Operations.
+            autoupdate (bool, optional): If True, updates the flowsheet dicts after adding the operation. Defaults to True.
+
+        """
+        self.case.Flowsheet.Operations.Add(type_name, name)
+        if autoupdate:
+            self.update_flowsheet()
+
+    def remove_operation(self, name: str, autoupdate: bool = True) -> None:
+        """Removes an operation from the flowsheet.
+
+        Args:
+            name (str): Name of the operation to be removed.
+            autoupdate (bool, optional): If True, updates the flowsheet dicts after removing the operation. Defaults to True.
+        """
+        self.case.Flowsheet.Operations.Remove(self.Operations[name].COMObject)
+        if autoupdate:
+            self.update_flowsheet()
         
     def __str__(self) -> str:
         """Returns a string representation of the flowsheet.
@@ -577,7 +647,6 @@ class EnergyStream(ProcessStream):
         else:
             self.COMObject.Power.SetValue(value, units)
             
-
 class ProcessUnit:
     """Superclass for all process units in the flowsheet. Contains the classification of the unit,
     the COMObject, and the name.
@@ -589,11 +658,13 @@ class ProcessUnit:
         COMObject (COMObject): COMObject from HYSYS.
         classification (str): Classification of the process unit.
         name (str): Name of the process unit.
+        type_name (str): Type name of the process unit. Used for creating new operations
     """        
     def __init__(self, COMObject):
         self.COMObject      = COMObject 
         self.classification = self.COMObject.ClassificationName
         self.name           = self.COMObject.name
+        self.type_name      = self.COMObject.TypeName
 
 class HeatExchanger(ProcessUnit):
     """Child of process unit. Includes the connections of the heat exchanger.
@@ -622,9 +693,18 @@ class HeatExchanger(ProcessUnit):
         Returns:
             dict: Dictionary that contains the feed, product and energy stream attached to the process unit.
         """        
-        feed            = self.COMObject.FeedStream.name
-        product         = self.COMObject.ProductStream.name
-        energy_stream   = self.COMObject.EnergyStream.name 
+        try:
+            feed = self.COMObject.FeedStream.name
+        except:
+            feed = "No feed stream attached"
+        try:
+            product = self.COMObject.ProductStream.name
+        except:
+            product = "No product stream attached"
+        try:
+            energy_stream = self.COMObject.EnergyStream.name 
+        except:
+            energy_stream = "No energy stream attached"
         return {"Feed": feed, "Product": product, 
                 "Energy stream": energy_stream}
     
@@ -824,7 +904,10 @@ class PFR(ProcessUnit):
             dict: Returns the connections
         """        
         feed = [i.name for i in self.COMObject.Feeds]
-        product = self.COMObject.Product.name
+        try:
+            product = self.COMObject.Product.name
+        except:
+            product = None
         try:
             energy = self.COMObject.EnergyStream.name
         except:
