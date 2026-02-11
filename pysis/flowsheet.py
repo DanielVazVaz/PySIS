@@ -51,6 +51,7 @@ class Simulation:
         self.components     = {i.name:Component(i) for i in self.case.Flowsheet.FluidPackage.Components}
         self.Solver         = self.case.Solver
         self.ReactionSets = {i.name:i for i in self.case.BasisManager.ReactionPackageManager.ReactionSets}
+        self.Integrator = self.Solver.Integrator
         self.update_flowsheet()
         
     def update_flowsheet(self) -> None:
@@ -65,7 +66,8 @@ class Simulation:
         dictionary_units = {"heaterop": HeatExchanger,
                             "coolerop": HeatExchanger,
                             "distillation": DistillationColumn,
-                            "pfreactorop": PFR}
+                            "pfreactorop": PFR,
+                            "fbcontrolop": FBController}
         self.Operations      = {str(i):dictionary_units[i.TypeName](i) if i.TypeName 
                                in dictionary_units else ProcessUnit(i) for i in self.case.Flowsheet.Operations}
         self.MatStreams      = {str(i):MaterialStream(i) for i in self.case.Flowsheet.MaterialStreams}
@@ -189,6 +191,32 @@ class Simulation:
         self.case.Flowsheet.Operations.Remove(self.Operations[name].COMObject)
         if autoupdate:
             self.update_flowsheet()
+
+    def run_integrator(self) -> None:
+        """Runs the integrator of the solver. This is used for dynamic simulations.
+        """        
+        self.Integrator.IsRunning = True 
+
+    def stop_integrator(self) -> None:
+        """Stops the integrator of the solver. This is used for dynamic simulations.
+        """        
+        self.Integrator.IsRunning = False
+
+    def get_integrator_time(self) -> float:
+        """Gets the current time of the integrator. This is used for dynamic simulations.
+
+        Returns:
+            float: Current time of the integrator in seconds.
+        """        
+        return self.Integrator.Time
+
+    def run_integrator_for(self, time: float) -> None:
+        """Runs the integrator for a specified time. This is used for dynamic simulations.
+
+        Args:
+            time (float): Time to run the integrator for in seconds.
+        """        
+        self.Integrator.RunFor(time)
         
     def __str__(self) -> str:
         """Returns a string representation of the flowsheet.
@@ -1141,7 +1169,75 @@ class PFR(ProcessUnit):
                 print(f"WARNING. The following properties were not found: {properties_not_found}\nThe valid properties are: {list(function_property_dict.keys())}")
 
         
+class FBController(ProcessUnit):
+    """Feedback controller.
+
+    Args:
+        COMObject (COMObject): COMObject from HYSYS
+
+    Attributes:
+        connections (dict): Dictionary with the manipulated variable, the controlled variable, and the setpoint.
+
+    Methods:
+        get_connections: Gets the connections of the controller.
+    """
+    def __init__(self, COMObject):
+        super().__init__(COMObject)
         
+    def get_SP(self, units = "") -> float:
+        """Gets the setpoint of the controller.
+
+        Returns:
+            float: Setpoint value in the specified units.
+            units: Units of the setpoint. When unitless, leave empty. Defaults to "".
+        """        
+        return self.COMObject.SP.GetValue(units)
+    
+    def set_SP(self, value:float, units:str = "") -> None:
+        """Sets the setpoint of the controller.
+
+        Args:
+            value (float): Value to set.
+            units (str, optional): Units of the setpoint. When unitless, leave empty. Defaults to "".
+        """        
+        assert self.COMObject.SP.State == 1, "The variable is calculated. Cannot modify it."
+        self.COMObject.SP.SetValue(value, units)
+
+    def get_PV(self, units = "") -> float:
+        """Gets the process variable of the controller.
+
+        Returns:
+            float: Process variable value in the specified units.
+            units: Units of the process variable. When unitless, leave empty. Defaults to "".
+        """        
+        return self.COMObject.PV.GetValue(units)
+    
+    def set_PV(self, value:float, units:str = "") -> None:
+        """Sets the process variable of the controller.
+
+        Args:
+            value (float): Value to set.
+            units (str, optional): Units of the process variable. When unitless, leave empty. Defaults to "".
+        """        
+        assert self.COMObject.PV.State == 1, "The variable is calculated. Cannot modify it."
+        self.COMObject.PV.SetValue(value, units)
+
+    def get_OP(self) -> float:
+        """Gets the manipulated variable of the controller.
+
+        Returns:
+            float: Manipulated variable value in the specified units.
+        """        
+        return self.COMObject.OP.GetValue()
+    
+    def set_OP(self, value:float) -> None:
+        """Sets the manipulated variable of the controller.
+
+        Args:
+            value (float): Value to set.
+        """        
+        assert self.COMObject.OP.State == 1, "The variable is calculated. Cannot modify it."
+        self.COMObject.OP.SetValue(value)
     
         
 
